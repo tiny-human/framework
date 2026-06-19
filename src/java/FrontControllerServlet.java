@@ -1,7 +1,10 @@
+package src.java;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.annotation.ElementType;
 import java.util.*;
+
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 
@@ -10,7 +13,7 @@ public class FrontControllerServlet extends HttpServlet {
 
     @Override
     public void init() throws ServletException {
-        String packageName = getServletContext().getInitParameter("packageName");
+        String packageName = getInitParameter("packageName");
 
         if(packageName == null || packageName.isEmpty()){
             throw new ServletException("Package name is not specified in the servlet context parameters.");
