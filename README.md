@@ -27,3 +27,13 @@ avoir un code executer soit au demarrage de l'application(1) soit au premier app
    *creeer une nouvelle annotation @urlMapping pour annoter les methodes des controllers qui aura une variable de type String qui sera l'url de la methode
    *quand on entre une url, on affiche la classe et la methode associee a cette url
    *quand on ne connait pas l'url, on trhows une exception et on affiche la liste des urls disponibles
+
+## sprint3
+   *creer une classe UrlMethod qui a comme attributs : 
+      -String url
+      -String method(Get/Post)
+      -surdefinir la methode equals pour comparer deux objets de type UrlMethod(si meme url, true)
+   *permettre d'avoir une meme url pour deux methodes differentes (Get/Post) dans un meme controller
+## sprint3-bis
+   *quand on connait une url , on appelle la methode et on affiche le resultat de l'execution de cette methode
+   *methode utilitaire qui recupere l'url et renvoie la classe et la methode associee a cette url
