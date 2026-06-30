@@ -10,8 +10,9 @@ import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 
 public class FrontControllerServlet extends HttpServlet {
-    private List<String> controllers = new ArrayList<>();
+    // private List<String> controllers = new ArrayList<>();
     private Map<MapKey, Mapping> urlMappings = new HashMap<>();
+    private Utilitaire utilitaire = new Utilitaire();
 
     @Override
     public void init() throws ServletException {
@@ -24,23 +25,25 @@ public class FrontControllerServlet extends HttpServlet {
         try{
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             List<String> classNames = Utilitaire.getClassInPackage(packageName, classLoader);
-            controllers = Utilitaire.getControllers(classNames, "annotation.Controller", ElementType.TYPE);
+            utilitaire.getControllers(classNames, "annotation.Controller", ElementType.TYPE, urlMappings);
+            // controllers = Utilitaire.getControllers(classNames, "annotation.Controller", ElementType.TYPE);
 
-            for(String controller : controllers){
-                Class<?> clazz = Class.forName(controller);
-                for(java.lang.reflect.Method method : clazz.getDeclaredMethods()){
-                    if(method.isAnnotationPresent(annotation.UrlMapping.class)){
-                        String url = method.getAnnotation(annotation.UrlMapping.class).url();
-                        String httpMethod = method.getAnnotation(annotation.UrlMapping.class).method().name();
+            // for(String controller : controllers){
+            //     Class<?> clazz = Class.forName(controller);
+            //     for(java.lang.reflect.Method method : clazz.getDeclaredMethods()){
+            //         if(method.isAnnotationPresent(annotation.UrlMapping.class)){
+            //             String url = method.getAnnotation(annotation.UrlMapping.class).url();
+            //             String httpMethod = method.getAnnotation(annotation.UrlMapping.class).method().name();
 
-                        MapKey key = new MapKey(url, httpMethod);
-                        if(urlMappings.containsKey(key)){
-                            throw new ServletException("Duplicate URL mapping found for URL: " + url);
-                        }
-                        urlMappings.put(key, new Mapping(controller, method.getName()));
-                    }
-                }
-            }
+            //             MapKey key = new MapKey(url, httpMethod);
+                        
+            //             if(urlMappings.containsKey(key)){
+            //                 throw new ServletException("Duplicate URL mapping found for URL: " + url);
+            //             }
+            //             urlMappings.put(key, new Mapping(controller, method.getName()));
+            //         }
+            //     }
+            // }
         } catch (Exception e) {
             throw new ServletException("Error initializing FrontControllerServlet: " + e.getMessage(), e);
         }
