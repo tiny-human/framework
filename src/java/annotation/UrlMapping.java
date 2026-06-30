@@ -6,4 +6,9 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface UrlMapping {
     String url();
+    HttpMethod method() default HttpMethod.GET;
+
+    public enum HttpMethod {
+        GET, POST, PUT, DELETE
+    }
 }
