@@ -29,17 +29,19 @@ public class ApplicationListener implements ServletContextListener {
 
             Utilitaire utilitaire = new Utilitaire();
 
-            utilitaire.getControllers(
-                    classNames,
-                    "annotation.Controller",
-                    ElementType.TYPE,
-                    urlMappings);
+            utilitaire.getControllers(classNames,"annotation.Controller",ElementType.TYPE,urlMappings);
 
             servletContext.setAttribute("urlMappings", urlMappings);
 
         } catch (Exception e) {
             throw new RuntimeException("Erreur lors de l'initialisation", e);
-        }
+        } 
+
+        String viewPrefix = servletContext.getInitParameter("viewPrefix");
+        String viewSuffix = servletContext.getInitParameter("viewSuffix");
+
+        servletContext.setAttribute("viewPrefix", viewPrefix);
+        servletContext.setAttribute("viewSuffix", viewSuffix);
     }
 
     @Override
