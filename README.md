@@ -37,3 +37,9 @@ avoir un code executer soit au demarrage de l'application(1) soit au premier app
 ## sprint3-bis
    *quand on connait une url , on appelle la methode et on affiche le resultat de l'execution de cette methode
    *methode utilitaire qui recupere l'url et renvoie la classe et la methode associee a cette url
+
+## srpint6(API)
+   *une methode d'action dans le controller ne va pas vers une vue mais renvoie un Json
+   *Ajouter une annotation (@WebAPI, nuveau methode), dans FrontServlet, tester l'existence de l'annotation niveau methode avent de faire le dispatch, si oui, on renvoie Json(PrintWriter) sinon comme d'hab 
+   
+   N.B: Si cote developpeur la methode retourne un objet ou autre que string, le cote framework transforme l'objet en Json et donne a printwriter
