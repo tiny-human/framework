@@ -74,7 +74,8 @@ public class Utilitaire {
 
     }
 
-    public void getMethod(List<String> controllers,Map<MapKey, Mapping> urlMappings)throws ServletException, ClassNotFoundException {
+    public void getMethod(List<String> controllers, Map<MapKey, Mapping> urlMappings)
+            throws ServletException, ClassNotFoundException {
 
         for (String controller : controllers) {
             Class<?> clazz = Class.forName(controller);
@@ -95,5 +96,14 @@ public class Utilitaire {
                 }
             }
         }
+    }
+
+    public static boolean haveParameter(java.lang.reflect.Method method, Class<?> param) {
+        for (Class<?> type : method.getParameterTypes()) {
+            if (type == param) {
+                return true;
+            }
+        }
+        return false;
     }
 }

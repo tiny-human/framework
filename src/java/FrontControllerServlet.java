@@ -9,12 +9,14 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.context.WebApplicationContext;
 
 public class FrontControllerServlet extends HttpServlet {
 
     private Map<MapKey, Mapping> urlMappings;
     private String viewPrefix;
     private String viewSuffix;
+    private WebApplicationContext springContext;
 
     @Override
     public void init() throws ServletException {
@@ -33,6 +35,8 @@ public class FrontControllerServlet extends HttpServlet {
             throw new ServletException(
                     "viewPrefix / viewSuffix ne sont pas définis dans web.xml.");
         }
+
+        springContext = (WebApplicationContext) getServletContext().getAttribute("springContext");
     }
 
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
@@ -64,8 +68,22 @@ public class FrontControllerServlet extends HttpServlet {
         try {
             Class<?> clazz = Class.forName(mapping.getClassName());
             Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
-            Method method = clazz.getDeclaredMethod(mapping.getMethodName());
-            Object result = method.invoke(controllerInstance);
+            Method method;
+            try {
+                method = clazz.getDeclaredMethod(mapping.getMethodName());
+            } catch (NoSuchMethodException e) {
+                method = clazz.getDeclaredMethod(mapping.getMethodName(), WebApplicationContext.class);
+            }
+            Object result;
+            if (Utilitaire.haveParameter(method, WebApplicationContext.class)) {
+                if (springContext == null) {
+                    throw new ServletException("springContext non initialise");
+                }
+                result = method.invoke(controllerInstance, springContext);
+
+            } else {
+                result = method.invoke(controllerInstance);
+            }
 
             if (result instanceof ModelAndView mv) {
                 // On pose les attributs du modele sur la requete
@@ -77,7 +95,8 @@ public class FrontControllerServlet extends HttpServlet {
                 request.getRequestDispatcher(page).forward(request, response);
 
             } else {
-                // Comportement d'origine conserve pour les controleurs qui ne renvoient pas de ModelAndView
+                // Comportement d'origine conserve pour les controleurs qui ne renvoient pas de
+                // ModelAndView
                 response.setContentType("text/html;charset=UTF-8");
                 try (PrintWriter out = response.getWriter()) {
                     out.println(result != null ? result.toString() : "");

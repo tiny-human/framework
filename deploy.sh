@@ -4,7 +4,7 @@ FRAMEWORK_NAME="framework"
 SRC_DIR="src"           # sources Java du framework
 BUILD_DIR="build"
 LIB_DIR="lib"
-SERVLET_API_JAR="$LIB_DIR/servlet-api.jar"
+CLASSPATH="$LIB_DIR/*"
 OUT_JAR="$FRAMEWORK_NAME.jar"
 
 # 1. Nettoyage 
@@ -29,7 +29,7 @@ echo "Sources à compiler :"
 cat sources.txt
 
 # 3. Compilation 
-javac -cp "$SERVLET_API_JAR" \
+javac -cp "$CLASSPATH" \
       -d "$BUILD_DIR/classes" \
       @sources.txt
 

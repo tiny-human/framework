@@ -5,8 +5,10 @@ import java.lang.annotation.ElementType;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.web.context.WebApplicationContext;
 
 public class ApplicationListener implements ServletContextListener {
+    static final String SPRING_ROOT = WebApplicationContext.ROOT_WEB_APPLICATION_CONTEXT_ATTRIBUTE;
 
     @Override
     public void contextInitialized(ServletContextEvent event) {
@@ -36,6 +38,8 @@ public class ApplicationListener implements ServletContextListener {
         } catch (Exception e) {
             throw new RuntimeException("Erreur lors de l'initialisation", e);
         } 
+
+        servletContext.setAttribute("springContext", servletContext.getAttribute(SPRING_ROOT));
 
         String viewPrefix = servletContext.getInitParameter("viewPrefix");
         String viewSuffix = servletContext.getInitParameter("viewSuffix");
