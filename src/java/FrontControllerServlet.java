@@ -9,7 +9,11 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import annotation.WebAPI;
+
 import org.springframework.web.context.WebApplicationContext;
+
+import com.google.gson.Gson;
 
 public class FrontControllerServlet extends HttpServlet {
 
@@ -17,6 +21,7 @@ public class FrontControllerServlet extends HttpServlet {
     private String viewPrefix;
     private String viewSuffix;
     private WebApplicationContext springContext;
+    private final Gson gson = new Gson();
 
     @Override
     public void init() throws ServletException {
@@ -85,7 +90,18 @@ public class FrontControllerServlet extends HttpServlet {
                 result = method.invoke(controllerInstance);
             }
 
-            if (result instanceof ModelAndView mv) {
+            if (method.isAnnotationPresent(WebAPI.class)) {
+                response.setContentType("application/json;charset=UTF-8");
+                try (PrintWriter out = response.getWriter()) {
+                    if (result instanceof String) {
+                        out.print(result);
+                    } else {
+                        out.print(gson.toJson(result));
+                    }
+                }
+                return;
+            }
+            else if (result instanceof ModelAndView mv) {
                 // On pose les attributs du modele sur la requete
                 for (Map.Entry<String, Object> entry : mv.getAttributes().entrySet()) {
                     request.setAttribute(entry.getKey(), entry.getValue());
