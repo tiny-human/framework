@@ -3,6 +3,7 @@ package src.java;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.Map;
 
 import jakarta.servlet.ServletException;
@@ -90,6 +91,42 @@ public class FrontControllerServlet extends HttpServlet {
                 result = method.invoke(controllerInstance);
             }
 
+            Parameter[] params = method.getParameters();
+            Object[] args = new Object[params.length];
+
+            for (int i = 0; i < params.length; i++) {
+                Parameter parameter = params[i];
+                String name = parameter.getName();
+                Class<?> type = parameter.getType();
+
+                String value = request.getParameter(name);
+
+                if (value == null || value.isEmpty()) {
+                    if (type.isPrimitive()) {
+                        throw new IllegalArgumentException("Un argument obligatoire manque: " + name);
+                    }
+                    args[i] = null;
+                }else{
+                    if (type.equals(String.class)) {
+                        args[i] = value;
+                    }else if(type.equals(int.class) || type.equals(Integer.class)){
+                        args[i] = Integer.parseInt(value);
+                    }
+                    else if(type.equals(long.class) || type.equals(Long.class)){
+                        args[i] = Long.parseLong(value);
+                    }
+                    else if(type.equals(double.class) || type.equals(Double.class)){
+                        args[i] = Double.parseDouble(value);
+                    }
+                    else if(type.equals(boolean.class) || type.equals(Boolean.class)){
+                        args[i] = Boolean.parseBoolean(value);
+                    }
+                    else{
+                        throw new IllegalArgumentException("Type de parametre non supporte: " + type.getName());
+                    }
+                }
+            }
+            
             if (method.isAnnotationPresent(WebAPI.class)) {
                 response.setContentType("application/json;charset=UTF-8");
                 try (PrintWriter out = response.getWriter()) {
