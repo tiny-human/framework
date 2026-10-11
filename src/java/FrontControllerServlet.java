@@ -74,21 +74,46 @@ public class FrontControllerServlet extends HttpServlet {
         try {
             Class<?> clazz = Class.forName(mapping.getClassName());
             Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
-            Method method;
-            try {
-                method = clazz.getDeclaredMethod(mapping.getMethodName());
-            } catch (NoSuchMethodException e) {
-                method = clazz.getDeclaredMethod(mapping.getMethodName(), WebApplicationContext.class);
-            }
-            Object result;
-            if (Utilitaire.haveParameter(method, WebApplicationContext.class)) {
-                if (springContext == null) {
-                    throw new ServletException("springContext non initialise");
+            // Method method;
+            // try {
+            // method = clazz.getDeclaredMethod(mapping.getMethodName());
+            // } catch (NoSuchMethodException e) {
+            // method = clazz.getDeclaredMethod(mapping.getMethodName(),
+            // WebApplicationContext.class);
+            // }
+            Method method = null;
+            for (Method m : clazz.getDeclaredMethods()) {
+                if (m.getName().equals(mapping.getMethodName())) {
+                    method = m;
+                    break;
                 }
-                result = method.invoke(controllerInstance, springContext);
+            }
+            if (method == null) {
+                throw new NoSuchMethodException(mapping.getMethodName());
+            }
+           
+            // if (Utilitaire.haveParameter(method, WebApplicationContext.class)) {
+            // if (springContext == null) {
+            // throw new ServletException("springContext non initialise");
+            // }
+            // result = method.invoke(controllerInstance, springContext);
 
-            } else {
-                result = method.invoke(controllerInstance);
+            // } else {
+            // result = method.invoke(controllerInstance);
+            // }
+
+            // Parameter[] params = method.getParameters();
+            // Object[] args = new Object[params.length];
+
+            // for (int i = 0; i < params.length; i++) {
+            // Parameter parameter = params[i];
+            // String name = parameter.getName();
+            // Class<?> type = parameter.getType();
+
+            // String value = request.getParameter(name);
+
+            if (Utilitaire.haveParameter(method, WebApplicationContext.class) && springContext == null) {
+                throw new ServletException("springContext non initialise");
             }
 
             Parameter[] params = method.getParameters();
@@ -96,9 +121,14 @@ public class FrontControllerServlet extends HttpServlet {
 
             for (int i = 0; i < params.length; i++) {
                 Parameter parameter = params[i];
-                String name = parameter.getName();
                 Class<?> type = parameter.getType();
 
+                if (type.equals(WebApplicationContext.class)) {
+                    args[i] = springContext;
+                    continue;
+                }
+
+                String name = parameter.getName();
                 String value = request.getParameter(name);
 
                 if (value == null || value.isEmpty()) {
@@ -106,27 +136,24 @@ public class FrontControllerServlet extends HttpServlet {
                         throw new IllegalArgumentException("Un argument obligatoire manque: " + name);
                     }
                     args[i] = null;
-                }else{
+                } else {
                     if (type.equals(String.class)) {
                         args[i] = value;
-                    }else if(type.equals(int.class) || type.equals(Integer.class)){
+                    } else if (type.equals(int.class) || type.equals(Integer.class)) {
                         args[i] = Integer.parseInt(value);
-                    }
-                    else if(type.equals(long.class) || type.equals(Long.class)){
+                    } else if (type.equals(long.class) || type.equals(Long.class)) {
                         args[i] = Long.parseLong(value);
-                    }
-                    else if(type.equals(double.class) || type.equals(Double.class)){
+                    } else if (type.equals(double.class) || type.equals(Double.class)) {
                         args[i] = Double.parseDouble(value);
-                    }
-                    else if(type.equals(boolean.class) || type.equals(Boolean.class)){
+                    } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
                         args[i] = Boolean.parseBoolean(value);
-                    }
-                    else{
+                    } else {
                         throw new IllegalArgumentException("Type de parametre non supporte: " + type.getName());
                     }
                 }
             }
-            
+            Object result = method.invoke(controllerInstance, args);
+
             if (method.isAnnotationPresent(WebAPI.class)) {
                 response.setContentType("application/json;charset=UTF-8");
                 try (PrintWriter out = response.getWriter()) {
@@ -137,8 +164,7 @@ public class FrontControllerServlet extends HttpServlet {
                     }
                 }
                 return;
-            }
-            else if (result instanceof ModelAndView mv) {
+            } else if (result instanceof ModelAndView mv) {
                 // On pose les attributs du modele sur la requete
                 for (Map.Entry<String, Object> entry : mv.getAttributes().entrySet()) {
                     request.setAttribute(entry.getKey(), entry.getValue());
