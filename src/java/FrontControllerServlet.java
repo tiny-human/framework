@@ -11,10 +11,10 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import annotation.WebAPI;
-
 import org.springframework.web.context.WebApplicationContext;
-
 import com.google.gson.Gson;
+import java.util.Collection;
+import jakarta.servlet.http.HttpSession;
 
 public class FrontControllerServlet extends HttpServlet {
 
@@ -48,6 +48,7 @@ public class FrontControllerServlet extends HttpServlet {
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
+        request.setCharacterEncoding("UTF-8");
         String uri = request.getRequestURI();
         String contextPath = request.getContextPath();
         String url = uri.substring(contextPath.length());
@@ -91,7 +92,7 @@ public class FrontControllerServlet extends HttpServlet {
             if (method == null) {
                 throw new NoSuchMethodException(mapping.getMethodName());
             }
-           
+
             // if (Utilitaire.haveParameter(method, WebApplicationContext.class)) {
             // if (springContext == null) {
             // throw new ServletException("springContext non initialise");
@@ -119,40 +120,118 @@ public class FrontControllerServlet extends HttpServlet {
             Parameter[] params = method.getParameters();
             Object[] args = new Object[params.length];
 
+            // for (int i = 0; i < params.length; i++) {
+            // Parameter parameter = params[i];
+            // Class<?> type = parameter.getType();
+
+            // if (type.equals(WebApplicationContext.class)) {
+            // args[i] = springContext;
+            // continue;
+            // }
+
+            // String name = parameter.getName();
+            // String value = request.getParameter(name);
+
+            // if (value == null || value.isEmpty()) {
+            // if (type.isPrimitive()) {
+            // throw new IllegalArgumentException("Un argument obligatoire manque: " +
+            // name);
+            // }
+            // args[i] = null;
+            // } else {
+            // if (type.equals(String.class)) {
+            // args[i] = value;
+            // } else if (type.equals(int.class) || type.equals(Integer.class)) {
+            // args[i] = Integer.parseInt(value);
+            // } else if (type.equals(long.class) || type.equals(Long.class)) {
+            // args[i] = Long.parseLong(value);
+            // } else if (type.equals(double.class) || type.equals(Double.class)) {
+            // args[i] = Double.parseDouble(value);
+            // } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
+            // args[i] = Boolean.parseBoolean(value);
+            // } else {
+            // throw new IllegalArgumentException("Type de parametre non supporte: " +
+            // type.getName());
+            // }
+            // }
+            // }
+            // for (int i = 0; i < params.length; i++) {
+            // Parameter parameter = params[i];
+            // Class<?> type = parameter.getType();
+            // String name = parameter.getName();
+
+            // if (type.equals(WebApplicationContext.class)) {
+            // args[i] = springContext;
+
+            // } else if (Utilitaire.isSimpleType(type)) {
+            // String value = request.getParameter(name);
+            // if (value == null || value.isEmpty()) {
+            // if (type.isPrimitive()) {
+            // throw new IllegalArgumentException("Un argument obligatoire manque: " +
+            // name);
+            // }
+            // args[i] = null;
+            // } else {
+            // args[i] = Utilitaire.convert(value, type);
+            // }
+
+            // } else {
+            // args[i] = Utilitaire.bindObject(type, name, request);
+            // }
+            // }
+
+            ModelAndView injectedMav = null;
+            boolean responseInjected = false;
+
             for (int i = 0; i < params.length; i++) {
                 Parameter parameter = params[i];
                 Class<?> type = parameter.getType();
+                String name = parameter.getName();
 
                 if (type.equals(WebApplicationContext.class)) {
                     args[i] = springContext;
-                    continue;
-                }
 
-                String name = parameter.getName();
-                String value = request.getParameter(name);
+                } else if (type.equals(HttpServletRequest.class)) {
+                    args[i] = request;
 
-                if (value == null || value.isEmpty()) {
-                    if (type.isPrimitive()) {
-                        throw new IllegalArgumentException("Un argument obligatoire manque: " + name);
-                    }
-                    args[i] = null;
-                } else {
-                    if (type.equals(String.class)) {
-                        args[i] = value;
-                    } else if (type.equals(int.class) || type.equals(Integer.class)) {
-                        args[i] = Integer.parseInt(value);
-                    } else if (type.equals(long.class) || type.equals(Long.class)) {
-                        args[i] = Long.parseLong(value);
-                    } else if (type.equals(double.class) || type.equals(Double.class)) {
-                        args[i] = Double.parseDouble(value);
-                    } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
-                        args[i] = Boolean.parseBoolean(value);
+                } else if (type.equals(HttpServletResponse.class)) {
+                    args[i] = response;
+                    responseInjected = true;
+
+                } else if (type.equals(HttpSession.class)) {
+                    args[i] = request.getSession();
+
+                } else if (type.equals(ModelAndView.class)) {
+                    injectedMav = new ModelAndView();
+                    args[i] = injectedMav;
+
+                } else if (Utilitaire.isSimpleType(type)) {
+                    String value = request.getParameter(name);
+                    if (value == null || value.isEmpty()) {
+                        if (type.isPrimitive()) {
+                            throw new IllegalArgumentException("Un argument obligatoire manque: " + name);
+                        }
+                        args[i] = null;
                     } else {
-                        throw new IllegalArgumentException("Type de parametre non supporte: " + type.getName());
+                        args[i] = Utilitaire.convert(value, type);
                     }
+
+                } else if (type.isArray() || Collection.class.isAssignableFrom(type)) {
+                    args[i] = Utilitaire.bindMultiple(parameter, request);
+
+                } else {
+                    args[i] = Utilitaire.bindObject(type, name, request);
                 }
             }
             Object result = method.invoke(controllerInstance, args);
+            // Le développeur a rempli le ModelAndView reçu en paramètre sans le renvoyer
+            if (result == null && injectedMav != null && injectedMav.getViewName() != null) {
+                result = injectedMav;
+            }
+            // Il a écrit lui-même dans la réponse : on n'y touche plus
+            if (result == null && responseInjected) {
+                return;
+            }
 
             if (method.isAnnotationPresent(WebAPI.class)) {
                 response.setContentType("application/json;charset=UTF-8");

@@ -1,0 +1,5 @@
+lib/
+build/
+deploy.sh
+README.md
+*.jar
