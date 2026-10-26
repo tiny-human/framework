@@ -10,8 +10,12 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.Part;
+
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Array;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
@@ -178,8 +182,15 @@ public class Utilitaire {
         return null;
     }
 
-    // Construit l'objet et le remplit à partir des champs "prefixe.attribut"
+    private static final int MAX_DEPTH = 4;
+
+    // Appelée par FrontControllerServlet : signature inchangée
     public static Object bindObject(Class<?> clazz, String prefix, HttpServletRequest request) throws Exception {
+        return bindObject(clazz, prefix, request, 0);
+    }
+
+    private static Object bindObject(Class<?> clazz, String prefix, HttpServletRequest request, int depth)
+            throws Exception {
         Object instance;
         try {
             instance = clazz.getDeclaredConstructor().newInstance();
@@ -196,21 +207,83 @@ public class Utilitaire {
                     continue;
                 }
 
-                String value = request.getParameter(prefix + "." + field.getName());
-                if (value == null || value.isEmpty()) {
-                    continue;
-                }
-
+                // 1. On cherche d'abord le setter : sans lui, on ignore l'attribut
                 Method setter = findSetter(clazz, field.getName());
                 if (setter == null) {
                     continue;
                 }
 
+                // 2. Le type attendu par le setter décide de la façon de lire la valeur
                 Class<?> setterType = setter.getParameterTypes()[0];
-                setter.invoke(instance, convert(value, setterType));
+                String fieldName = prefix + "." + field.getName();
+
+                if (isSimpleType(setterType)) {
+                    String value = request.getParameter(fieldName);
+                    if (value == null || value.isEmpty()) {
+                        continue;
+                    }
+                    setter.invoke(instance, convert(value, setterType));
+
+                } else if (setterType.equals(MapFile.class)) {
+                    // Fichier : lu dans les parties de la requête, pas dans les paramètres
+                    MapFile file = readMapFile(request, fieldName);
+                    if (file != null) {
+                        setter.invoke(instance, file);
+                    }
+
+                } else if (isNestedObject(setterType)) {
+                    // Objet imbriqué : seulement s'il y a une valeur à y mettre
+                    if (depth >= MAX_DEPTH || !hasValueWithPrefix(request, fieldName)) {
+                        continue;
+                    }
+                    setter.invoke(instance, bindObject(setterType, fieldName, request, depth + 1));
+                }
+                // tableaux, collections, types du JDK : ignorés pour l'instant
             }
         }
         return instance;
+    }
+
+    // Vrai si le type peut être un objet métier à remplir
+    private static boolean isNestedObject(Class<?> type) {
+        String name = type.getName();
+        return !isSimpleType(type)
+                && !type.equals(MapFile.class)
+                && !type.isArray()
+                && !type.isInterface()
+                && !Modifier.isAbstract(type.getModifiers())
+                && !name.startsWith("java.")
+                && !name.startsWith("javax.")
+                && !name.startsWith("jakarta.");
+    }
+
+    // Vrai s'il existe un paramètre ou un fichier "prefixe.xxx" non vide
+    private static boolean hasValueWithPrefix(HttpServletRequest request, String prefix)
+            throws IOException, ServletException {
+        String start = prefix + ".";
+
+        Enumeration<String> names = request.getParameterNames();
+        while (names.hasMoreElements()) {
+            String name = names.nextElement();
+            if (name.startsWith(start)) {
+                String value = request.getParameter(name);
+                if (value != null && !value.isEmpty()) {
+                    return true;
+                }
+            }
+        }
+
+        // Les fichiers n'apparaissent pas dans les paramètres : on regarde les parties
+        if (isMultipart(request)) {
+            for (Part part : request.getParts()) {
+                String fileName = part.getSubmittedFileName();
+                if (part.getName().startsWith(start)
+                        && fileName != null && !fileName.isEmpty() && part.getSize() > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // Étape 2 : tableaux et collections de types simples
@@ -287,5 +360,65 @@ public class Utilitaire {
             return (Collection<Object>) type.getDeclaredConstructor().newInstance(); // Vector...
         }
         throw new IllegalArgumentException("Type de collection non supporte: " + type.getName());
+    }
+
+    // Vrai si la requête est un envoi de formulaire avec fichiers
+    public static boolean isMultipart(HttpServletRequest request) {
+        String contentType = request.getContentType();
+        return contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("multipart/");
+    }
+
+    // Lit le fichier du champ "partName" ; renvoie null si aucun fichier n'a été
+    // envoyé
+    public static MapFile readMapFile(HttpServletRequest request, String partName)
+            throws IOException, ServletException {
+        if (!isMultipart(request)) {
+            return null;
+        }
+        return partToMapFile(request.getPart(partName));
+    }
+
+    private static MapFile partToMapFile(Part part) throws IOException {
+        if (part == null) {
+            return null;
+        }
+
+        // getSubmittedFileName() vaut null pour un champ texte, vide si aucun fichier
+        // choisi
+        String submitted = part.getSubmittedFileName();
+        if (submitted == null || submitted.isEmpty() || part.getSize() == 0) {
+            return null;
+        }
+
+        // Certains navigateurs envoient le chemin complet : on garde le dernier segment
+        String fileName = submitted;
+        int slash = Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\'));
+        if (slash >= 0) {
+            fileName = fileName.substring(slash + 1);
+        }
+        if (fileName.isEmpty()) {
+            return null;
+        }
+
+        // Nom et extension : "archive.tar.gz" -> "archive.tar" + "gz" ; ".gitignore" ->
+        // pas d'extension
+        String nom = fileName;
+        String extension = "";
+        int dot = fileName.lastIndexOf('.');
+        if (dot > 0) {
+            nom = fileName.substring(0, dot);
+            extension = fileName.substring(dot + 1);
+        }
+
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        try (InputStream in = part.getInputStream()) {
+            byte[] chunk = new byte[8192];
+            int read;
+            while ((read = in.read(chunk)) != -1) {
+                buffer.write(chunk, 0, read);
+            }
+        }
+
+        return new MapFile(nom, extension, buffer.toByteArray());
     }
 }

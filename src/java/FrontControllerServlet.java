@@ -205,6 +205,15 @@ public class FrontControllerServlet extends HttpServlet {
                     injectedMav = new ModelAndView();
                     args[i] = injectedMav;
 
+                } else if (type.equals(ModelAndView.class)) {
+                    injectedMav = new ModelAndView();
+                    args[i] = injectedMav;
+
+                } else if (type.equals(MapFile.class)) {
+                    args[i] = Utilitaire.readMapFile(request, name);
+
+                } else if (Utilitaire.isSimpleType(type)) {
+
                 } else if (Utilitaire.isSimpleType(type)) {
                     String value = request.getParameter(name);
                     if (value == null || value.isEmpty()) {
