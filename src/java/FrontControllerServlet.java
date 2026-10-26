@@ -182,6 +182,7 @@ public class FrontControllerServlet extends HttpServlet {
 
             ModelAndView injectedMav = null;
             boolean responseInjected = false;
+            MaSession maSession = null;
 
             for (int i = 0; i < params.length; i++) {
                 Parameter parameter = params[i];
@@ -201,9 +202,12 @@ public class FrontControllerServlet extends HttpServlet {
                 } else if (type.equals(HttpSession.class)) {
                     args[i] = request.getSession();
 
-                } else if (type.equals(ModelAndView.class)) {
-                    injectedMav = new ModelAndView();
-                    args[i] = injectedMav;
+                } else if (type.equals(MaSession.class)) {
+                    // Une seule copie partagée, même si la méthode déclare plusieurs MaSession
+                    if (maSession == null) {
+                        maSession = MaSession.from(request.getSession(true));
+                    }
+                    args[i] = maSession;
 
                 } else if (type.equals(ModelAndView.class)) {
                     injectedMav = new ModelAndView();
@@ -211,8 +215,6 @@ public class FrontControllerServlet extends HttpServlet {
 
                 } else if (type.equals(MapFile.class)) {
                     args[i] = Utilitaire.readMapFile(request, name);
-
-                } else if (Utilitaire.isSimpleType(type)) {
 
                 } else if (Utilitaire.isSimpleType(type)) {
                     String value = request.getParameter(name);
@@ -233,6 +235,15 @@ public class FrontControllerServlet extends HttpServlet {
                 }
             }
             Object result = method.invoke(controllerInstance, args);
+
+            // Recopie dans la vraie session AVANT le forward : la JSP lit la vraie session
+            if (maSession != null) {
+                HttpSession realSession = request.getSession(false);
+                if (realSession != null) {
+                    maSession.flushTo(realSession);
+                }
+            }
+
             // Le développeur a rempli le ModelAndView reçu en paramètre sans le renvoyer
             if (result == null && injectedMav != null && injectedMav.getViewName() != null) {
                 result = injectedMav;
