@@ -15,12 +15,15 @@ import org.springframework.web.context.WebApplicationContext;
 import com.google.gson.Gson;
 import java.util.Collection;
 import jakarta.servlet.http.HttpSession;
+import annotation.Secured;
 
 public class FrontControllerServlet extends HttpServlet {
 
     private Map<MapKey, Mapping> urlMappings;
     private String viewPrefix;
     private String viewSuffix;
+    private String userAttribute;
+    private String loginUrl;
     private WebApplicationContext springContext;
     private final Gson gson = new Gson();
 
@@ -43,6 +46,10 @@ public class FrontControllerServlet extends HttpServlet {
         }
 
         springContext = (WebApplicationContext) getServletContext().getAttribute("springContext");
+
+        // Les context-param se lisent directement, sans passer par le listener
+        userAttribute = getServletContext().getInitParameter("userSessionAttribute");
+        loginUrl = getServletContext().getInitParameter("loginUrl");
     }
 
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
@@ -93,6 +100,10 @@ public class FrontControllerServlet extends HttpServlet {
                 throw new NoSuchMethodException(mapping.getMethodName());
             }
 
+            // Contrôle d'accès AVANT la liaison des paramètres
+            if (!checkAccess(method, request, response)) {
+                return;
+            }
             // if (Utilitaire.haveParameter(method, WebApplicationContext.class)) {
             // if (springContext == null) {
             // throw new ServletException("springContext non initialise");
@@ -248,6 +259,7 @@ public class FrontControllerServlet extends HttpServlet {
             if (result == null && injectedMav != null && injectedMav.getViewName() != null) {
                 result = injectedMav;
             }
+
             // Il a écrit lui-même dans la réponse : on n'y touche plus
             if (result == null && responseInjected) {
                 return;
@@ -284,6 +296,33 @@ public class FrontControllerServlet extends HttpServlet {
         } catch (Exception e) {
             throw new ServletException("Error invoking controller method: " + e.getMessage(), e);
         }
+    }
+
+    // Renvoie true si l'accès est autorisé ; sinon la réponse est déjà envoyée
+    private boolean checkAccess(Method method, HttpServletRequest request, HttpServletResponse response)
+            throws IOException, ServletException {
+        Secured secured = method.getAnnotation(Secured.class);
+        if (secured == null) {
+            return true; // méthode publique
+        }
+        if (userAttribute == null) {
+            throw new ServletException(
+                    "Le paramètre userSessionAttribute n'est pas défini dans web.xml");
+        }
+
+        // Vraie session, sans en créer une pour un simple visiteur
+        HttpSession session = request.getSession(false);
+        Object user = (session == null) ? null : session.getAttribute(userAttribute);
+
+        if (!(user instanceof User)) {
+            if (loginUrl != null) {
+                response.sendRedirect(request.getContextPath() + loginUrl);
+            } else {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentification requise");
+            }
+            return false;
+        }
+        return true;
     }
 
     @Override
