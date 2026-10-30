@@ -322,6 +322,12 @@ public class FrontControllerServlet extends HttpServlet {
             }
             return false;
         }
+        // Rôles : s'il y en a, l'utilisateur doit en posséder au moins un
+        String[] roles = secured.roles();
+        if (roles.length > 0 && !((User) user).hasAnyRole(roles)) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Accès refusé : droits insuffisants");
+            return false;
+        }
         return true;
     }
 
