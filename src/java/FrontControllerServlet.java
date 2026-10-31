@@ -22,8 +22,8 @@ public class FrontControllerServlet extends HttpServlet {
     private Map<MapKey, Mapping> urlMappings;
     private String viewPrefix;
     private String viewSuffix;
-    private String userAttribute;
-    private String loginUrl;
+    private String sessionUserName;
+    private String sessionRoleName;
     private WebApplicationContext springContext;
     private final Gson gson = new Gson();
 
@@ -47,9 +47,14 @@ public class FrontControllerServlet extends HttpServlet {
 
         springContext = (WebApplicationContext) getServletContext().getAttribute("springContext");
 
-        // Les context-param se lisent directement, sans passer par le listener
-        userAttribute = getServletContext().getInitParameter("userSessionAttribute");
-        loginUrl = getServletContext().getInitParameter("loginUrl");
+        sessionUserName = (String) getServletContext().getAttribute("session-user-name");
+
+        sessionRoleName = (String) getServletContext().getAttribute("session-role-name");
+
+        if (sessionUserName == null || sessionRoleName == null) {
+            throw new ServletException("Les noms des attributs de session ne sont pas initialisés.");
+        }
+
     }
 
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
@@ -100,8 +105,7 @@ public class FrontControllerServlet extends HttpServlet {
                 throw new NoSuchMethodException(mapping.getMethodName());
             }
 
-            // Contrôle d'accès AVANT la liaison des paramètres
-            if (!checkAccess(method, request, response)) {
+            if (!checkAuthorization(method, clazz, request, response)) {
                 return;
             }
             // if (Utilitaire.haveParameter(method, WebApplicationContext.class)) {
@@ -298,37 +302,107 @@ public class FrontControllerServlet extends HttpServlet {
         }
     }
 
-    // Renvoie true si l'accès est autorisé ; sinon la réponse est déjà envoyée
-    private boolean checkAccess(Method method, HttpServletRequest request, HttpServletResponse response)
-            throws IOException, ServletException {
+    private boolean checkAuthorization(Method method, Class<?> controllerClass, HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
         Secured secured = method.getAnnotation(Secured.class);
+
         if (secured == null) {
-            return true; // méthode publique
-        }
-        if (userAttribute == null) {
-            throw new ServletException(
-                    "Le paramètre userSessionAttribute n'est pas défini dans web.xml");
+            secured = controllerClass.getAnnotation(Secured.class);
         }
 
-        // Vraie session, sans en créer une pour un simple visiteur
+        if (secured == null) {
+            return true;
+        }
+
         HttpSession session = request.getSession(false);
-        Object user = (session == null) ? null : session.getAttribute(userAttribute);
 
-        if (!(user instanceof User)) {
-            if (loginUrl != null) {
-                response.sendRedirect(request.getContextPath() + loginUrl);
-            } else {
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentification requise");
+        if (session == null || session.getAttribute(sessionUserName) == null) {
+            handleUnauthorized(request, response);
+            return false;
+        }
+
+        String[] requiredRoles = secured.roles();
+
+        if (requiredRoles.length == 0) {
+            return true;
+        }
+
+        Object sessionRoles = session.getAttribute(sessionRoleName);
+
+        if (!hasRequiredRole(sessionRoles, requiredRoles)) {
+            handleForbidden(request, response);
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean containsRole(String sessionRole, String[] requiredRoles) {
+        for (String requiredRole : requiredRoles) {
+            if (requiredRole.equals(sessionRole)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasRequiredRole(Object sessionRoles, String[] requiredRoles) {
+        if (sessionRoles == null) {
+            return false;
+        }
+
+        if (sessionRoles instanceof String) {
+            return containsRole((String) sessionRoles, requiredRoles);
+        }
+
+        if (sessionRoles instanceof Collection<?>) {
+            for (Object role : (Collection<?>) sessionRoles) {
+                if (role instanceof String && containsRole((String) role, requiredRoles)) {
+                    return true;
+                }
             }
             return false;
         }
-        // Rôles : s'il y en a, l'utilisateur doit en posséder au moins un
-        String[] roles = secured.roles();
-        if (roles.length > 0 && !((User) user).hasAnyRole(roles)) {
-            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Accès refusé : droits insuffisants");
-            return false;
+
+        if (sessionRoles.getClass().isArray()) {
+            int length = java.lang.reflect.Array.getLength(sessionRoles);
+            for (int i = 0; i < length; i++) {
+                Object role = java.lang.reflect.Array.get(sessionRoles, i);
+                if (role instanceof String && containsRole((String) role, requiredRoles)) {
+                    return true;
+                }
+            }
         }
-        return true;
+        return false;
+    }
+
+    private void handleUnauthorized(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        if (acceptsJson(request)) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"error\":\"Authentification requise\"}");
+            return;
+        }
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("text/html;charset=UTF-8");
+        response.getWriter().write("<h1>401 - Authentification requise</h1>");
+    }
+
+    private void handleForbidden(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        if (acceptsJson(request)) {
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"error\":\"Droits insuffisants\"}");
+            return;
+        }
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType("text/html;charset=UTF-8");
+        response.getWriter().write("<h1>403 - Droits insuffisants</h1>");
+    }
+
+    private boolean acceptsJson(HttpServletRequest request) {
+        String accept = request.getHeader("Accept");
+        return accept != null && accept.toLowerCase().contains("application/json");
     }
 
     @Override
