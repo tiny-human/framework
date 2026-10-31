@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.context.WebApplicationContext;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ApplicationListener implements ServletContextListener {
     static final String SPRING_ROOT = WebApplicationContext.ROOT_WEB_APPLICATION_CONTEXT_ATTRIBUTE;
@@ -27,6 +28,10 @@ public class ApplicationListener implements ServletContextListener {
             List<String> classNames = Utilitaire.getClassInPackage(packageName, classLoader);
 
             Map<MapKey, Mapping> urlMappings = new HashMap<>();
+
+            Map<Class<?>, Object> controllersInstance = new ConcurrentHashMap<>();
+
+            servletContext.setAttribute("controllersInstance",controllersInstance);
 
             Utilitaire utilitaire = new Utilitaire();
 
