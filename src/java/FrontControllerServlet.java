@@ -22,6 +22,7 @@ public class FrontControllerServlet extends HttpServlet {
     private Map<MapKey, Mapping> urlMappings;
     private String viewPrefix;
     private String viewSuffix;
+    private Map<Class<?>, Object> controllersInstance;
     private String sessionUserName;
     private String sessionRoleName;
     private WebApplicationContext springContext;
@@ -35,6 +36,12 @@ public class FrontControllerServlet extends HttpServlet {
         if (urlMappings == null) {
             throw new ServletException(
                     "Les URL mappings n'ont pas été initialisés.");
+        }
+
+        controllersInstance = (Map<Class<?>, Object>) getServletContext().getAttribute("controllersInstance");
+
+        if (controllersInstance == null) {
+            throw new ServletException("La table controllersInstance n'a pas été initialisée.");
         }
 
         viewPrefix = (String) getServletContext().getAttribute("viewPrefix");
@@ -86,7 +93,24 @@ public class FrontControllerServlet extends HttpServlet {
 
         try {
             Class<?> clazz = Class.forName(mapping.getClassName());
-            Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
+
+            Object controllerInstance = controllersInstance.get(clazz);
+
+            if (controllerInstance == null) {
+                synchronized (controllersInstance) {
+                    controllerInstance = controllersInstance.get(clazz);
+
+                    if (controllerInstance == null) {
+                        try {
+                            controllerInstance = clazz.getDeclaredConstructor().newInstance();
+                        } catch (ReflectiveOperationException e) {
+                            throw new ServletException("Impossible de créer le contrôleur " + clazz.getName()
+                                    + ". Il doit avoir un constructeur " + "sans argument.", e);
+                        }
+                        controllersInstance.put(clazz, controllerInstance);
+                    }
+                }
+            }
             // Method method;
             // try {
             // method = clazz.getDeclaredMethod(mapping.getMethodName());
@@ -402,7 +426,7 @@ public class FrontControllerServlet extends HttpServlet {
 
     private boolean acceptsJson(HttpServletRequest request) {
         String accept = request.getHeader("Accept");
-        return accept != null && accept.toLowerCase().contains("application/json");
+        return accept != null&& accept.toLowerCase().contains("application/json");
     }
 
     @Override
