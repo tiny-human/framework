@@ -24,25 +24,39 @@ public class ApplicationListener implements ServletContextListener {
         try {
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
 
-            List<String> classNames =
-                    Utilitaire.getClassInPackage(packageName, classLoader);
+            List<String> classNames = Utilitaire.getClassInPackage(packageName, classLoader);
 
             Map<MapKey, Mapping> urlMappings = new HashMap<>();
 
             Utilitaire utilitaire = new Utilitaire();
 
-            utilitaire.getControllers(classNames,"annotation.Controller",ElementType.TYPE,urlMappings);
+            utilitaire.getControllers(classNames, "annotation.Controller", ElementType.TYPE, urlMappings);
 
             servletContext.setAttribute("urlMappings", urlMappings);
 
         } catch (Exception e) {
             throw new RuntimeException("Erreur lors de l'initialisation", e);
-        } 
+        }
 
         servletContext.setAttribute("springContext", servletContext.getAttribute(SPRING_ROOT));
 
         String viewPrefix = servletContext.getInitParameter("viewPrefix");
         String viewSuffix = servletContext.getInitParameter("viewSuffix");
+
+        String sessionUserName = servletContext.getInitParameter("session-user-name");
+
+        String sessionRoleName = servletContext.getInitParameter("session-role-name");
+
+        if (sessionUserName == null || sessionUserName.isBlank()) {
+            throw new RuntimeException("Le context-param session-user-name n'est pas défini.");
+        }
+
+        if (sessionRoleName == null || sessionRoleName.isBlank()) {
+            throw new RuntimeException("Le context-param session-role-name n'est pas défini.");
+        }
+
+        servletContext.setAttribute("session-user-name", sessionUserName);
+        servletContext.setAttribute("session-role-name", sessionRoleName);
 
         servletContext.setAttribute("viewPrefix", viewPrefix);
         servletContext.setAttribute("viewSuffix", viewSuffix);
